@@ -1,75 +1,69 @@
 ---
 name: compile-app-workflows
-description: Compiles a product recording and OpenAPI spec into Cursor skills by POSTing to the local workflow-compiler FastAPI service. Use when the user asks to compile workflows, generate skills from a video or OpenAPI spec, upload an mp4 to the compiler, or run the intake compile job.
+description: Compiles a product recording and OpenAPI spec from the current chat into Cursor skills by POSTing them to the workflow-compiler FastAPI service. Use when the user asks to compile workflows, generate skills from a video or OpenAPI spec, or run the intake compile job.
 ---
 
 # Compile App Workflows
 
-Turn a screen recording plus an API spec into one Cursor skill per workflow. Do **not** extract workflows or invent REST paths yourself. The FastAPI service does that.
+Turn a screen recording plus an API spec into one Cursor skill per workflow. Inputs come from **this chat**, not from hardcoded demo files.
+
+Do **not** extract workflows or invent REST paths yourself. The FastAPI service does that.
 
 ## Service
 
-Default base URL: `http://127.0.0.1:8000`
+Default: `https://cursor-hackathon-6lgm.onrender.com`
 
-Override with `COMPILE_API_URL`. If `COMPILE_API_KEY` is set, send `Authorization: Bearer <key>`.
+Override with `COMPILE_API_URL` (local: `http://127.0.0.1:8000`). If `COMPILE_API_KEY` is set, send `Authorization: Bearer <key>`.
 
-If `/health` is unreachable, start the service from the repo root:
+Pass the base URL into the client with `--base-url`.
 
-```bash
-PYTHONPATH=backend uvicorn workflow_compiler.service:app --reload --port 8000
-```
+## Inputs from chat
 
-## Inputs
+Resolve files from the current conversation, in this order:
 
-Collect paths from the user. At least one of **video**, **video_url**, or **workflows JSON** is required. Spec-only is invalid (the API returns 400).
+1. Files the user attached or dragged into the chat
+2. Files they `@`-mentioned
+3. Paths they typed (absolute or repo-relative)
 
-| Input | Form field | Notes |
+Write chat attachments to a real path on disk first if needed (mp4 and OpenAPI are uploaded as multipart files). Then pass those paths to the client.
+
+| Input | Form field | Required? |
 | --- | --- | --- |
-| Screen recording `.mp4` | `video` | Optional if workflows JSON is provided |
-| OpenAPI YAML/JSON | `spec` | Needed to ground skills to real endpoints |
-| Extra notes / docs | `docs` | Repeatable; appended to extract + map prompts |
-| Pre-extracted workflows | `workflows` | Skip Gemini; still maps + emits skills |
-| Remote video | `video_url` | Alternative to uploading `video` |
+| Screen recording `.mp4` | `video` | Yes, unless they gave `video_url` or workflows JSON |
+| OpenAPI YAML/JSON | `spec` | Yes to ground skills; warn and continue only if they explicitly skip it |
+| Extra notes / docs | `docs` | Optional |
+| Pre-extracted workflows | `workflows` | Alternative to video |
+| Remote video URL | `video_url` | Alternative to uploading `video` |
 
-Prefer files in this repo when the user does not specify others:
-
-- Video: `assets/openemr.mp4`
-- Spec: `fixtures/openemr/openapi.yaml`
-- Fast path (no Gemini): `fixtures/openemr/workflows.json`
+If video (or workflows) is missing, **ask for it**. Do not use `assets/openemr.mp4` or `fixtures/openemr/*` unless the user says to use the demo files.
 
 ## Run the job
 
-From the repo root, execute the bundled client. It POSTs `multipart/form-data` to `POST /v1/jobs`, polls `GET /v1/jobs/{id}` until `status` is `done` or `failed`, then writes each returned skill to `--out`.
+From the repo root:
 
 ```bash
 python .cursor/skills/compile-app-workflows/scripts/compile_job.py \
-  --video assets/openemr.mp4 \
-  --spec fixtures/openemr/openapi.yaml \
+  --base-url https://cursor-hackathon-6lgm.onrender.com \
+  --video PATH_FROM_CHAT \
+  --spec PATH_FROM_CHAT \
   --out .cursor/skills
 ```
 
-Skip Gemini when workflows already exist:
+Add `--doc PATH_FROM_CHAT` for each extra doc. If they provided workflows JSON instead of a video, use `--workflows` and omit `--video`.
 
-```bash
-python .cursor/skills/compile-app-workflows/scripts/compile_job.py \
-  --workflows fixtures/openemr/workflows.json \
-  --spec fixtures/openemr/openapi.yaml \
-  --out .cursor/skills
-```
+Do not call Gemini or OpenAI from this skill. Do not invent API paths.
 
-Pass extra docs with repeated `--doc path`. Do not call Gemini or OpenAI from this skill. Do not `curl` invent endpoints.
-
-Video jobs often take several minutes (`extract` then `map`). Poll output looks like `status=running stage=extract`. Keep waiting until the script exits.
+Video jobs often take several minutes. Keep polling until the script exits.
 
 ## After success
 
 1. Summarize `skill_count` and each written `.cursor/skills/<name>/SKILL.md`.
-2. Call out skills whose body says they have **no matching operations** — those UI steps are out of spec on purpose.
-3. Do not rewrite the generated markdown to add APIs. The mapper already dropped anything not in the spec.
+2. Call out skills whose body says they have **no matching operations**.
+3. Do not rewrite the generated markdown to add APIs.
 
 ## Failures
 
-- Health check failed → start uvicorn, then retry.
-- HTTP 400 "Provide a video file..." → missing video/workflows.
-- HTTP 401 → set `COMPILE_API_KEY` to match the server.
-- `status=failed` → show `error` from the job payload. Do not retry in a loop unless the user asks.
+- Health check failed → the Render service may be sleeping; retry `/health` once, then report the error.
+- HTTP 400 "Provide a video file..." → the chat did not yield a video/workflows file.
+- HTTP 401 → set `COMPILE_API_KEY` to match Render.
+- `status=failed` → show `error`. Do not retry in a loop unless the user asks.
