@@ -58,6 +58,7 @@ def extract_workflows_from_video(
     api_key: str | None = None,
     model: str | None = None,
     timeout_sec: int = 600,
+    extra_context: str | None = None,
 ) -> WorkflowExtraction:
     """Send a local video or YouTube URL to Gemini and return validated workflows."""
     key = api_key or gemini_api_key()
@@ -69,6 +70,12 @@ def extract_workflows_from_video(
     )
 
     video_str = str(video)
+    prompt = EXTRACT_PROMPT
+    extra = (extra_context or "").strip()
+    if extra:
+        prompt = (
+            f"{EXTRACT_PROMPT}\n\nAdditional documentation from the user:\n{extra}\n"
+        )
     uploaded_name: str | None = None
     try:
         video_part, uploaded_name = _prepare_video(
@@ -82,7 +89,7 @@ def extract_workflows_from_video(
         )
         response = client.models.generate_content(
             model=model_name,
-            contents=[video_part, EXTRACT_PROMPT],
+            contents=[video_part, prompt],
             config=_generation_config(timeout_ms),
         )
     finally:

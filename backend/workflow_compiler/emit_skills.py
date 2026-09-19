@@ -125,6 +125,30 @@ def emit_skills(
     return written
 
 
+def skills_payload(
+    mapping: ApiMappingResult,
+    *,
+    spec: dict[str, Any] | None = None,
+) -> list[dict[str, str]]:
+    used: set[str] = set()
+    payload: list[dict[str, str]] = []
+    for plan in mapping.workflows:
+        slug = skill_slug(plan.workflow_name, used)
+        payload.append(
+            {
+                "name": slug,
+                "markdown": render_skill(
+                    plan,
+                    spec=spec,
+                    spec_title=mapping.spec_title,
+                    spec_version=mapping.spec_version,
+                    name=slug,
+                ),
+            }
+        )
+    return payload
+
+
 def _description(plan: WorkflowPlan, spec_title: str, version: str) -> str:
     if plan.apis:
         calls = ", ".join(f"{item.method} {item.path}" for item in plan.apis)

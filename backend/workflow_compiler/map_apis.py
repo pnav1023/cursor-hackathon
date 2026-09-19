@@ -72,6 +72,7 @@ def map_workflows_to_apis(
     model: str | None = None,
     include_fhir: bool = False,
     timeout_sec: int = 180,
+    extra_context: str | None = None,
 ) -> ApiMappingResult:
     spec_path = Path(spec).expanduser().resolve()
     openapi = load_openapi(spec_path)
@@ -90,6 +91,7 @@ def map_workflows_to_apis(
         spec_title=str(info.get("title") or spec_path.name),
         spec_version=str(info.get("version") or ""),
         spec_path=str(spec_path),
+        extra_context=extra_context,
     )
     return validate_mapping(
         draft, openapi, spec_path=spec_path, drop_ungrounded=True
@@ -154,6 +156,7 @@ def _ask_openai(
     spec_title: str,
     spec_version: str,
     spec_path: str,
+    extra_context: str | None = None,
 ) -> ApiMappingResult:
     key = api_key or openai_api_key()
     model_name = model or openai_model()
@@ -167,6 +170,9 @@ def _ask_openai(
         f"OpenAPI catalog ({len(operations)} operations):\n{catalog}\n\n"
         f"Workflows JSON:\n{json.dumps(payload, indent=2)}\n"
     )
+    extra = (extra_context or "").strip()
+    if extra:
+        user_prompt += f"\nAdditional documentation from the user:\n{extra}\n"
     system_prompt = (
         f"{MAP_PROMPT}\n\nJSON schema:\n"
         f"{json.dumps(ApiMappingResult.model_json_schema(), indent=2)}"

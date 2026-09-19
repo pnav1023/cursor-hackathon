@@ -11,17 +11,21 @@ version = "0.1.0"
 description = "Turn a screen recording into structured workflows for agent tools"
 requires-python = ">=3.11"
 dependencies = [
+  "fastapi>=0.115",
   "google-genai>=1.0",
   "openai>=1.40",
   "pydantic>=2.7",
+  "python-multipart>=0.0.9",
   "pyyaml>=6.0",
+  "uvicorn>=0.30",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "httpx>=0.27"]
 
 [project.scripts]
 compile-workflow = "workflow_compiler.cli:main"
+compile-api = "workflow_compiler.service:main"
 
 [tool.setuptools.package-dir]
 "" = "backend"
