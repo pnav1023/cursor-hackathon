@@ -15,7 +15,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from workflow_compiler.env import load_env_files
 from workflow_compiler.jobs import JobStore
@@ -40,6 +40,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 store = JobStore()
+HOME_HTML = (Path(__file__).with_name("home.html")).read_text(encoding="utf-8")
 
 
 def _api_key(
@@ -54,6 +55,11 @@ def _api_key(
         token = authorization[7:].strip()
     if token != expected:
         raise HTTPException(status_code=401, detail="Invalid or missing API key.")
+
+
+@app.get("/", response_class=HTMLResponse)
+def home() -> str:
+    return HOME_HTML
 
 
 @app.get("/health")
